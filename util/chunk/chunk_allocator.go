@@ -179,7 +179,7 @@ var (
 	}
 	columnPool = sync.Pool{
 		New: func() interface{} {
-			return new(column)
+			return new(Column)
 		},
 	}
 )
@@ -192,10 +192,10 @@ func NewChunkWithAllocator(a Allocator, fields []*types.FieldType, cap, maxChunk
 
 	cap = mathutil.Min(cap, maxChunkSize)
 	chk := chunkPool.Get().(*Chunk)
-	chk.columns = make([]*column, 0, len(fields))
+	chk.columns = make([]*Column, 0, len(fields))
 	for _, f := range fields {
 		elemLen := getFixedLen(f)
-		col := columnPool.Get().(*column)
+		col := columnPool.Get().(*Column)
 		if elemLen == varElemLen {
 			estimatedElemLen := 8
 			// TODO: make a buffer pool for offsets
@@ -211,7 +211,6 @@ func NewChunkWithAllocator(a Allocator, fields []*types.FieldType, cap, maxChunk
 			col.offsets = nil
 		}
 		col.length = 0
-		col.nullCount = 0
 		chk.columns = append(chk.columns, col)
 	}
 	chk.capacity = cap
