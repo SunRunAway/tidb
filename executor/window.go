@@ -26,21 +26,42 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 )
 
+type chunkPool struct {
+	pool []*chunk.Chunk
+	new  func() *chunk.Chunk
+}
+
+func (p *chunkPool) get() *chunk.Chunk {
+	if len(p.pool) == 0 {
+		return p.new()
+	}
+	c := p.pool[0]
+	p.pool = p.pool[1:]
+	return c
+}
+
+func (p *chunkPool) put(c ...*chunk.Chunk) {
+	p.pool = append(p.pool, c...)
+}
+
 // WindowExec is the executor for window functions.
 type WindowExec struct {
 	baseExecutor
 
-	groupChecker         *groupChecker
-	inputIter            *chunk.Iterator4Chunk
-	inputRow             chunk.Row
-	groupRows            []chunk.Row
-	childResults         []*chunk.Chunk
-	executed             bool
-	meetNewGroup         bool
-	remainingRowsInGroup int
-	remainingRowsInChunk int
-	numWindowFuncs       int
-	processor            windowProcessor
+	groupChecker           *groupChecker
+	inputIter              *chunk.Iterator4Chunk
+	inputRow               chunk.Row
+	groupRows              []chunk.Row
+	childResults           []*chunk.Chunk
+	remainingChunksInGroup []*chunk.Chunk
+	childPool              *chunkPool
+	emptyChunk             bool
+	executed               bool
+	meetNewGroup           bool
+	remainingRowsInGroup   int
+	remainingRowsInChunk   int
+	numWindowFuncs         int
+	processor              windowProcessor
 }
 
 // Close implements the Executor Close interface.
@@ -52,6 +73,7 @@ func (e *WindowExec) Close() error {
 // Next implements the Executor Next interface.
 func (e *WindowExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 	chk.Reset()
+	e.emptyChunk = true
 	if (e.executed || e.meetNewGroup) && e.remainingRowsInGroup > 0 {
 		err := e.appendResult2Chunk(chk)
 		if err != nil {
@@ -114,7 +136,7 @@ func (e *WindowExec) fetchChildIfNecessary(ctx context.Context, chk *chunk.Chunk
 		return errors.Trace(err)
 	}
 
-	childResult := newFirstChunk(e.children[0])
+	childResult := e.childPool.get()
 	err = Next(ctx, e.children[0], childResult)
 	if err != nil {
 		return errors.Trace(err)
@@ -134,8 +156,9 @@ func (e *WindowExec) fetchChildIfNecessary(ctx context.Context, chk *chunk.Chunk
 
 // appendResult2Chunk appends result of the window function to the result chunk.
 func (e *WindowExec) appendResult2Chunk(chk *chunk.Chunk) (err error) {
-	if err := e.copyChk(chk); err != nil {
-		return err
+	if e.emptyChunk { // a new WindowExec.Next
+		e.emptyChunk = false
+		e.remainingRowsInChunk = e.childResults[0].NumRows()
 	}
 	remained := mathutil.Min(e.remainingRowsInChunk, e.remainingRowsInGroup)
 	e.groupRows, err = e.processor.appendResult2Chunk(e.ctx, e.groupRows, chk, remained)
@@ -147,18 +170,33 @@ func (e *WindowExec) appendResult2Chunk(chk *chunk.Chunk) (err error) {
 	if e.remainingRowsInGroup == 0 {
 		e.processor.resetPartialResult()
 		e.groupRows = e.groupRows[:0]
+		// a window exhausted, put all chunks of this window excluding last one into childPool
+		if len(e.remainingChunksInGroup) > 0 {
+			e.childPool.put(e.remainingChunksInGroup...)
+			e.remainingChunksInGroup = e.remainingChunksInGroup[:0]
+		}
+	}
+	if e.remainingRowsInChunk == 0 {
+		if err := e.copyChk(chk); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func (e *WindowExec) copyChk(chk *chunk.Chunk) error {
-	if len(e.childResults) == 0 || chk.NumRows() > 0 {
-		return nil
-	}
 	childResult := e.childResults[0]
 	e.childResults = e.childResults[1:]
-	e.remainingRowsInChunk = childResult.NumRows()
 	columns := e.Schema().Columns[:len(e.Schema().Columns)-e.numWindowFuncs]
+	if e.remainingRowsInGroup > 0 {
+		for i, col := range columns {
+			if err := chk.CopyTo(i, childResult, col.Index); err != nil {
+				return err
+			}
+		}
+		e.remainingChunksInGroup = append(e.remainingChunksInGroup, childResult)
+		return nil
+	}
 	for i, col := range columns {
 		if err := chk.MakeRefTo(i, childResult, col.Index); err != nil {
 			return err

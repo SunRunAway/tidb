@@ -176,6 +176,15 @@ func (c *Chunk) MakeRefTo(dstColIdx int, src *Chunk, srcColIdx int) error {
 	return nil
 }
 
+// MakeRefTo copies chunk's data `src.columns[srcColIdx]` to `c.columns[dstColIdx]`.
+func (c *Chunk) CopyTo(dstColIdx int, src *Chunk, srcColIdx int) error {
+	if c.sel != nil || src.sel != nil {
+		return errors.New(msgErrSelNotNil)
+	}
+	src.columns[srcColIdx].CopyConstruct(c.columns[dstColIdx])
+	return nil
+}
+
 // SwapColumn swaps Column "c.columns[colIdx]" with Column
 // "other.columns[otherIdx]". If there exists columns refer to the Column to be
 // swapped, we need to re-build the reference.

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/pingcap/parser/ast"
@@ -25,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/expression/aggregation"
 	"github.com/pingcap/tidb/planner/core"
+	"github.com/pingcap/tidb/planner/property"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/sessionctx/variable"
 	"github.com/pingcap/tidb/types"
@@ -87,6 +89,8 @@ func (mds *mockDataSource) genColDatums(col int) (results []interface{}) {
 				return results[i].(int64) < results[j].(int64)
 			case mysql.TypeDouble:
 				return results[i].(float64) < results[j].(float64)
+			case mysql.TypeVarString:
+				return results[i].(string) < results[j].(string)
 			default:
 				panic("not implement")
 			}
@@ -102,6 +106,8 @@ func (mds *mockDataSource) randDatum(typ *types.FieldType) interface{} {
 		return int64(rand.Int())
 	case mysql.TypeDouble:
 		return rand.Float64()
+	case mysql.TypeVarString:
+		return rawData
 	default:
 		panic("not implement")
 	}
@@ -149,6 +155,8 @@ func buildMockDataSource(opt mockDataSourceParameters) *mockDataSource {
 				m.genData[idx].AppendInt64(colIdx, colData[colIdx][i].(int64))
 			case mysql.TypeDouble:
 				m.genData[idx].AppendFloat64(colIdx, colData[colIdx][i].(float64))
+			case mysql.TypeVarString:
+				m.genData[idx].AppendString(colIdx, colData[colIdx][i].(string))
 			default:
 				panic("not implement")
 			}
@@ -171,7 +179,8 @@ type aggTestCase struct {
 func (a aggTestCase) columns() []*expression.Column {
 	return []*expression.Column{
 		{Index: 0, RetType: types.NewFieldType(mysql.TypeDouble)},
-		{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)}}
+		{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)},
+	}
 }
 
 func (a aggTestCase) String() string {
@@ -347,6 +356,115 @@ func BenchmarkAggDistinct(b *testing.B) {
 					benchmarkAggExecWithCase(b, cas)
 				})
 			}
+		}
+	}
+}
+
+func buildWindowExecutor(ctx sessionctx.Context, src Executor, schema *expression.Schema, partitionBy []*expression.Column) Executor {
+	plan := new(core.PhysicalWindow)
+	desc, _ := aggregation.NewWindowFuncDesc(ctx, ast.WindowFuncRowNumber, nil)
+	plan.WindowFuncDescs = []*aggregation.WindowFuncDesc{desc}
+	for _, col := range partitionBy {
+		plan.PartitionBy = append(plan.PartitionBy, property.Item{Col: col})
+	}
+	plan.OrderBy = nil
+	plan.SetSchema(schema)
+	plan.Init(ctx, nil)
+	plan.SetChildren(nil)
+	b := newExecutorBuilder(ctx, nil)
+	exec := b.build(plan)
+	window := exec.(*WindowExec)
+	window.children[0] = src
+	return exec
+}
+
+type windowTestCase struct {
+	// The test table's schema is fixed (col Double, partitionBy LongLong, rawData Varstring(5128), col LongLong).
+	// The windowFunc is fixed (row_number is the cheapest function)
+	groupByNDV int // the number of distinct group-by keys
+	rows       int
+	ctx        sessionctx.Context
+}
+
+var rawData = strings.Repeat("x", 5*1024)
+
+func (a windowTestCase) columns() []*expression.Column {
+	rawDataTp := new(types.FieldType)
+	types.DefaultTypeForValue(rawData, rawDataTp)
+	return []*expression.Column{
+		{Index: 0, RetType: types.NewFieldType(mysql.TypeDouble)},
+		{Index: 1, RetType: types.NewFieldType(mysql.TypeLonglong)},
+		{Index: 2, RetType: rawDataTp},
+		{Index: 3, RetType: types.NewFieldType(mysql.TypeLonglong)},
+	}
+}
+
+func (a windowTestCase) String() string {
+	return fmt.Sprintf("(groupByNDV:%v, rows:%v)",
+		a.groupByNDV, a.rows)
+}
+
+func defaultWindowTestCase() *windowTestCase {
+	ctx := mock.NewContext()
+	ctx.GetSessionVars().InitChunkSize = variable.DefInitChunkSize
+	ctx.GetSessionVars().MaxChunkSize = variable.DefMaxChunkSize
+	return &windowTestCase{1000, 10000000, ctx}
+}
+
+func benchmarkWindowExecWithCase(b *testing.B, casTest *windowTestCase) {
+	cols := casTest.columns()
+	dataSource := buildMockDataSource(mockDataSourceParameters{
+		schema: expression.NewSchema(cols...),
+		ndvs:   []int{0, casTest.groupByNDV, 0, 0},
+		orders: []bool{false, true, false, false},
+		rows:   casTest.rows,
+		ctx:    casTest.ctx,
+	})
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer() // prepare a new window-executor
+		childCols := casTest.columns()
+		schema := expression.NewSchema(childCols...)
+		windowExec := buildWindowExecutor(casTest.ctx, dataSource, schema, childCols[1:2])
+		tmpCtx := context.Background()
+		chk := newFirstChunk(windowExec)
+		dataSource.prepareChunks()
+
+		b.StartTimer()
+		if err := windowExec.Open(tmpCtx); err != nil {
+			b.Fatal(err)
+		}
+		for {
+			if err := windowExec.Next(tmpCtx, chk); err != nil {
+				b.Fatal(b)
+			}
+			if chk.NumRows() == 0 {
+				break
+			}
+		}
+
+		if err := windowExec.Close(); err != nil {
+			b.Fatal(err)
+		}
+		b.StopTimer()
+	}
+}
+
+func BenchmarkWindowRows(b *testing.B) {
+	b.ReportAllocs()
+	rows := []int{1000, 10000, 100000}
+	ndvs := []int{10, 100, 1000}
+	rows = []int{100000}
+	ndvs = []int{10}
+	for _, row := range rows {
+		for _, ndv := range ndvs {
+			cas := defaultWindowTestCase()
+			cas.rows = row
+			cas.groupByNDV = ndv
+			b.Run(fmt.Sprintf("%v", cas), func(b *testing.B) {
+				benchmarkWindowExecWithCase(b, cas)
+			})
 		}
 	}
 }

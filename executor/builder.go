@@ -2189,6 +2189,11 @@ func (b *executorBuilder) buildWindow(v *plannercore.PhysicalWindow) *WindowExec
 		processor:      processor,
 		groupChecker:   newGroupChecker(b.ctx.GetSessionVars().StmtCtx, groupByItems),
 		numWindowFuncs: len(v.WindowFuncDescs),
+		childPool: &chunkPool{
+			new: func() *chunk.Chunk {
+				return newFirstChunk(base.children[0])
+			},
+		},
 	}
 }
 
