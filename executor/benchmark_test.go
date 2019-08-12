@@ -379,7 +379,7 @@ func buildWindowExecutor(ctx sessionctx.Context, src Executor, schema *expressio
 }
 
 type windowTestCase struct {
-	// The test table's schema is fixed (col Double, partitionBy LongLong, rawData Varstring(5128), col LongLong).
+	// The test table's schema is fixed (col Double, partitionBy LongLong, rawData VarString(5128), col LongLong).
 	// The windowFunc is fixed (row_number is the cheapest function)
 	groupByNDV int // the number of distinct group-by keys
 	rows       int
@@ -455,8 +455,8 @@ func BenchmarkWindowRows(b *testing.B) {
 	b.ReportAllocs()
 	rows := []int{1000, 10000, 100000}
 	ndvs := []int{10, 100, 1000}
-	rows = []int{100000}
-	ndvs = []int{10}
+	// rows = []int{100000}
+	// ndvs = []int{10}
 	for _, row := range rows {
 		for _, ndv := range ndvs {
 			cas := defaultWindowTestCase()
