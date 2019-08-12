@@ -176,7 +176,7 @@ func (c *Chunk) MakeRefTo(dstColIdx int, src *Chunk, srcColIdx int) error {
 	return nil
 }
 
-// MakeRefTo copies chunk's data `src.columns[srcColIdx]` to `c.columns[dstColIdx]`.
+// CopyTo copies chunk's data `src.columns[srcColIdx]` to `c.columns[dstColIdx]`.
 func (c *Chunk) CopyTo(dstColIdx int, src *Chunk, srcColIdx int) error {
 	if c.sel != nil || src.sel != nil {
 		return errors.New(msgErrSelNotNil)

@@ -80,7 +80,7 @@ func (e *WindowExec) Next(ctx context.Context, chk *chunk.Chunk) error {
 			return err
 		}
 	}
-	for !e.executed && (chk.NumRows() == 0 || e.remainingRowsInChunk > 0) {
+	for !e.executed && (e.emptyChunk || e.remainingRowsInChunk > 0) {
 		err := e.consumeOneGroup(ctx, chk)
 		if err != nil {
 			e.executed = true
