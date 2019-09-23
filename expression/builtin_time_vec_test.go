@@ -34,6 +34,23 @@ var vecBuiltinTimeCases = map[string][]vecExprBenchCase{
 	ast.Date: {
 		{retEvalType: types.ETDatetime, childrenTypes: []types.EvalType{types.ETDatetime}},
 	},
+	ast.AddTime: {
+		// builtinAddStringAndStringSig, a special case written by hand.
+		{
+			retEvalType:   types.ETString,
+			childrenTypes: []types.EvalType{types.ETString, types.ETString},
+			childrenFieldTypes: []*types.FieldType{nil, {
+				Tp:      mysql.TypeString,
+				Flen:    types.UnspecifiedLength,
+				Decimal: types.UnspecifiedLength,
+				Flag:    mysql.BinaryFlag,
+			}},
+			geners: []dataGenerator{
+				gener{defaultGener{eType: types.ETString, nullRation: 0.2}},
+				gener{defaultGener{eType: types.ETString, nullRation: 0.2}},
+			},
+		},
+	},
 }
 
 func (s *testEvaluatorSuite) TestVectorizedBuiltinTimeEvalOneVec(c *C) {
