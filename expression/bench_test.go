@@ -619,8 +619,10 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 			if !testAll && testFunc[baseFuncName] != true {
 				continue
 			}
+			// do not forget to implement the vectorized method.
+			c.Assert(baseFunc.vectorized(), IsTrue, Commentf("func: %v", baseFuncName))
 			commentf := func(row int) CommentInterface {
-				return Commentf("case %+v, row: %v, rowData: %v", testCase, row, input.GetRow(row).GetDatumRow(fts))
+				return Commentf("func: %v, case %+v, row: %v, rowData: %v", baseFuncName, testCase, row, input.GetRow(row).GetDatumRow(fts))
 			}
 			it := chunk.NewIterator4Chunk(input)
 			i := 0
@@ -636,7 +638,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalInt(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						c.Assert(val, Equals, i64s[i], commentf(i))
 					}
@@ -652,7 +654,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalReal(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						c.Assert(val, Equals, f64s[i], commentf(i))
 					}
@@ -668,7 +670,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalDecimal(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						c.Assert(*val, Equals, d64s[i], commentf(i))
 					}
@@ -684,7 +686,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalTime(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						c.Assert(val, Equals, t64s[i], commentf(i))
 					}
@@ -700,7 +702,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalDuration(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						c.Assert(val.Duration, Equals, d64s[i], commentf(i))
 					}
@@ -715,7 +717,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalJSON(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						var cmp int
 						cmp = json.CompareBinary(val, output.GetJSON(i))
@@ -732,7 +734,7 @@ func testVectorizedBuiltinFunc(c *C, vecExprCases vecExprBenchCases) {
 				for row := it.Begin(); row != it.End(); row = it.Next() {
 					val, isNull, err := baseFunc.evalString(row)
 					c.Assert(err, IsNil)
-					c.Assert(isNull, Equals, output.IsNull(i))
+					c.Assert(isNull, Equals, output.IsNull(i), commentf(i))
 					if !isNull {
 						c.Assert(val, Equals, output.GetString(i), commentf(i))
 					}
