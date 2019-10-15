@@ -623,6 +623,7 @@ func (e *HashAggExec) parallelExec(ctx context.Context, chk *chunk.Chunk) error 
 		}
 	})
 
+	log.Println("parallelExec")
 	for !chk.IsFull() {
 		log.Printf("%p HashAggExec.parallelExec start send chk to finalInputCh", e)
 		e.finalInputCh <- chk
