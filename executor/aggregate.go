@@ -15,6 +15,8 @@ package executor
 
 import (
 	"context"
+	"log"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -73,6 +75,8 @@ type HashAggPartialWorker struct {
 // HashAggFinalWorker indicates the final workers of parallel hash agg execution,
 // the number of the worker can be set by `tidb_hashagg_final_concurrency`.
 type HashAggFinalWorker struct {
+	workerId    int
+	HashAggExec *HashAggExec
 	baseHashAggWorker
 
 	rowBuffer           []types.Datum
@@ -288,6 +292,9 @@ func (e *HashAggExec) initForParallelExec(ctx sessionctx.Context) {
 	// Init final workers.
 	for i := 0; i < finalConcurrency; i++ {
 		e.finalWorkers[i] = HashAggFinalWorker{
+			workerId:    i,
+			HashAggExec: e,
+
 			baseHashAggWorker:   newBaseHashAggWorker(e.finishCh, e.FinalAggFuncs, e.maxChunkSize),
 			partialResultMap:    make(aggPartialResultMapper),
 			groupSet:            set.NewStringSet(),
@@ -467,6 +474,7 @@ func (w *HashAggFinalWorker) consumeIntermData(sctx sessionctx.Context) (err err
 
 func (w *HashAggFinalWorker) getFinalResult(sctx sessionctx.Context) {
 	result, finished := w.receiveFinalResultHolder()
+	log.Printf("%p workerId: %v, HashAggFinalWorker.getFinalResult receiveFinalResultHolder.", w.HashAggExec, w.workerId)
 	if finished {
 		return
 	}
@@ -489,6 +497,7 @@ func (w *HashAggFinalWorker) getFinalResult(sctx sessionctx.Context) {
 		}
 	}
 	w.outputCh <- &AfFinalResult{chk: result}
+	log.Printf("%p workerId: %v, chkSize: %v, HashAggFinalWorker.getFinalResult exits.", w.HashAggExec, w.workerId, result.NumRows())
 }
 
 func (w *HashAggFinalWorker) receiveFinalResultHolder() (*chunk.Chunk, bool) {
@@ -615,9 +624,14 @@ func (e *HashAggExec) parallelExec(ctx context.Context, chk *chunk.Chunk) error 
 	})
 
 	for !chk.IsFull() {
+		log.Printf("%p HashAggExec.parallelExec start send chk to finalInputCh", e)
 		e.finalInputCh <- chk
+		log.Printf("%p HashAggExec.parallelExec sended chk to finalInputCh", e)
+		debug.PrintStack()
+
 		result, ok := <-e.finalOutputCh
 		if !ok { // all finalWorkers exited
+			log.Println("but all finalWorkers exited", len(e.finalInputCh), cap(e.finalInputCh))
 			if chk.NumRows() > 0 { // but there are some data left
 				return nil
 			}
