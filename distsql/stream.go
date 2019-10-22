@@ -15,6 +15,7 @@ package distsql
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/pingcap/errors"
@@ -41,6 +42,7 @@ type streamResult struct {
 
 	// NOTE: curr == nil means stream finish, while len(curr.RowsData) == 0 doesn't.
 	curr         *tipb.Chunk
+	currRowCnt   int
 	partialCount int64
 	feedback     *statistics.QueryFeedback
 }
@@ -96,6 +98,10 @@ func (r *streamResult) readDataFromResponse(ctx context.Context, resp kv.Respons
 	if err != nil {
 		return false, errors.Trace(err)
 	}
+
+	if ctx.Value("index") != nil {
+		log.Println("streamResult", stream.OutputCounts, resultSubset.GetExecDetails())
+	}
 	r.feedback.Update(resultSubset.GetStartKey(), stream.OutputCounts)
 	r.partialCount++
 	r.ctx.GetSessionVars().StmtCtx.MergeExecDetails(resultSubset.GetExecDetails(), nil)
@@ -107,6 +113,9 @@ func (r *streamResult) readDataIfNecessary(ctx context.Context) error {
 	if r.curr != nil && len(r.curr.RowsData) > 0 {
 		return nil
 	}
+	if ctx.Value("index") != nil {
+		log.Println("streamResult.readDataIfNecessary", "currRowCnt", r.currRowCnt)
+	}
 
 	tmp := new(tipb.Chunk)
 	finish, err := r.readDataFromResponse(ctx, r.resp, tmp)
@@ -115,13 +124,18 @@ func (r *streamResult) readDataIfNecessary(ctx context.Context) error {
 	}
 	if finish {
 		r.curr = nil
+		r.currRowCnt = 0
 		return nil
 	}
 	r.curr = tmp
+	r.currRowCnt = 0
 	return nil
 }
 
 func (r *streamResult) flushToChunk(chk *chunk.Chunk) (err error) {
+	before := chk.NumRows()
+	defer func() { r.currRowCnt += chk.NumRows() - before }()
+
 	remainRowsData := r.curr.RowsData
 	decoder := codec.NewDecoder(chk, r.ctx.GetSessionVars().Location())
 	for !chk.IsFull() && len(remainRowsData) > 0 {

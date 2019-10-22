@@ -16,6 +16,8 @@ package distsql
 import (
 	"context"
 	"fmt"
+	"log"
+	"strings"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/errors"
@@ -31,6 +33,10 @@ import (
 const (
 	codeInvalidResp = 1
 )
+
+func init() {
+	log.SetFlags(log.Lshortfile | log.LstdFlags)
+}
 
 // Select sends a DAG request, returns SelectResult.
 // In kvReq, KeyRanges is required, Concurrency/KeepOrder/Desc/IsolationLevel/Priority are optional.
@@ -48,6 +54,15 @@ func Select(ctx context.Context, sctx sessionctx.Context, kvReq *kv.Request, fie
 
 	if !sctx.GetSessionVars().EnableStreaming {
 		kvReq.Streaming = false
+	}
+	if !strings.HasPrefix(sctx.GetSessionVars().StmtCtx.OriginalSQL, "SELECT * FROM t2 WHERE c = 10;") {
+		// kvReq.Streaming = false
+	} else {
+	}
+	if kvReq.Streaming {
+		if ctx.Value("index") != nil {
+			fmt.Println("~~~~", sctx.GetSessionVars().StmtCtx.OriginalSQL, kvReq.Streaming, kvReq.KeyRanges)
+		}
 	}
 	resp := sctx.GetClient().Send(ctx, kvReq, sctx.GetSessionVars().KVVars)
 	if resp == nil {

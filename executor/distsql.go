@@ -16,10 +16,12 @@ package executor
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"runtime"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -454,6 +456,8 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		tps = e.idxColTps
 	}
 	// Since the first read only need handle information. So its returned col is only 1.
+	log.Println("IndexLookUpExecutor.startIndexWorker", "SelectWithRuntimeStats")
+	ctx = context.WithValue(ctx, "index", "1")
 	result, err := distsql.SelectWithRuntimeStats(ctx, e.ctx, kvReq, tps, e.feedback, getPhysicalPlanIDs(e.idxPlans), e.id)
 	if err != nil {
 		return err
@@ -480,6 +484,9 @@ func (e *IndexLookUpExecutor) startIndexWorker(ctx context.Context, kvRanges []k
 		count, err := worker.fetchHandles(ctx1, result)
 		if err != nil {
 			e.feedback.Invalidate()
+		}
+		if e.ctx.GetSessionVars().StmtCtx != nil && strings.HasPrefix(e.ctx.GetSessionVars().StmtCtx.OriginalSQL, "SELECT * FROM t2 WHERE c = 10 ORDER BY a DESC, b DESC") {
+			log.Println("IndexLookUpExecutor.startIndexWorker totol count:", count)
 		}
 		cancel()
 		if err := result.Close(); err != nil {

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1022,14 +1023,22 @@ func (e *SelectionExec) Next(ctx context.Context, req *chunk.Chunk) error {
 		return e.unBatchedNext(ctx, req)
 	}
 
+	scan, got := 0, 0
+	defer func() {
+		if e.ctx.GetSessionVars().StmtCtx != nil && strings.HasPrefix(e.ctx.GetSessionVars().StmtCtx.OriginalSQL, "SELECT * FROM t2 WHERE c = 10") {
+			fmt.Println("SelectionExec", scan, got)
+		}
+	}()
 	for {
 		for ; e.inputRow != e.inputIter.End(); e.inputRow = e.inputIter.Next() {
+			scan++
 			if !e.selected[e.inputRow.Idx()] {
 				continue
 			}
 			if req.IsFull() {
 				return nil
 			}
+			got++
 			req.AppendRow(e.inputRow)
 		}
 		err := Next(ctx, e.children[0], e.childResult)

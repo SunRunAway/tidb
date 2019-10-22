@@ -16,6 +16,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/opentracing/opentracing-go"
 	"github.com/pingcap/parser/model"
@@ -124,6 +125,7 @@ func (e *TableReaderExecutor) Open(ctx context.Context) error {
 		}
 	}
 	firstPartRanges, secondPartRanges := splitRanges(e.ranges, e.keepOrder, e.desc)
+	log.Println("TableReaderExecutor.Open range:", firstPartRanges, secondPartRanges)
 	firstResult, err := e.buildResp(ctx, firstPartRanges)
 	if err != nil {
 		e.feedback.Invalidate()
@@ -226,6 +228,7 @@ func (tr *tableResultHandler) open(optionalResult, result distsql.SelectResult) 
 func (tr *tableResultHandler) nextChunk(ctx context.Context, chk *chunk.Chunk) error {
 	if !tr.optionalFinished {
 		err := tr.optionalResult.Next(ctx, chk)
+		log.Println("tableResultHandler", "Next", chk.NumRows())
 		if err != nil {
 			return err
 		}

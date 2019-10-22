@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"sort"
 	"strings"
 	"sync"
@@ -56,6 +57,10 @@ func (c *CopClient) Send(ctx context.Context, req *kv.Request, vars *kv.Variable
 	if err != nil {
 		return copErrorResponse{err}
 	}
+	if ctx.Value("index") != nil {
+		log.Println("CopClient.Send len(tasks)", len(tasks), tasks[0].ranges)
+	}
+
 	it := &copIterator{
 		store:           c.store,
 		req:             req,
@@ -360,6 +365,7 @@ type copIterator struct {
 
 // copIteratorWorker receives tasks from copIteratorTaskSender, handles tasks and sends the copResponse to respChan.
 type copIteratorWorker struct {
+	ctx      context.Context
 	taskCh   <-chan *copTask
 	wg       *sync.WaitGroup
 	store    *tikvStore
@@ -466,6 +472,7 @@ func (it *copIterator) open(ctx context.Context) {
 	// Start it.concurrency number of workers to handle cop requests.
 	for i := 0; i < it.concurrency; i++ {
 		worker := &copIteratorWorker{
+			ctx:      ctx,
 			taskCh:   taskCh,
 			wg:       &it.wg,
 			store:    it.store,
@@ -742,12 +749,29 @@ func (worker *copIteratorWorker) handleCopStreamResult(bo *Backoffer, rpcCtx *RP
 		// streaming request returns io.EOF, so the first Response is nil.
 		return nil, nil
 	}
+	uuid := time.Now().String()
+	if worker.ctx.Value("index") != nil {
+		log.Println("handleCopStreamResult", "a new fop loop", uuid)
+	}
 	for {
 		remainedTasks, err := worker.handleCopResponse(bo, rpcCtx, &copResponse{pbResp: resp}, task, ch, lastRange, costTime)
+		if worker.ctx.Value("index") != nil {
+			log.Println("handleCopResponse", "remainedTasks", len(remainedTasks), "err", err)
+		}
 		if err != nil || len(remainedTasks) != 0 {
 			return remainedTasks, errors.Trace(err)
 		}
+		if worker.ctx.Value("index") != nil {
+			log.Println("stream.Recv")
+		}
 		resp, err = stream.Recv()
+		if worker.ctx.Value("index") != nil {
+			if err == nil {
+				log.Println("stream.Recv done", resp.Range, uuid)
+			} else {
+				log.Println("stream.Recv done", err)
+			}
+		}
 		if err != nil {
 			if errors.Cause(err) == io.EOF {
 				return nil, nil
@@ -765,6 +789,9 @@ func (worker *copIteratorWorker) handleCopStreamResult(bo *Backoffer, rpcCtx *RP
 			}
 			return worker.buildCopTasksFromRemain(bo, lastRange, task)
 		}
+		if resp.Range != nil {
+			return nil, errors.New("The range entry in streaming response is nil, this should not happend.")
+		}
 		lastRange = resp.Range
 	}
 }
@@ -778,6 +805,7 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 		if err := bo.Backoff(BoRegionMiss, errors.New(regionErr.String())); err != nil {
 			return nil, errors.Trace(err)
 		}
+		log.Println("&&&&&&", "regionErr", regionErr)
 		// We may meet RegionError at the first packet, but not during visiting the stream.
 		return buildCopTasks(bo, worker.store.regionCache, task.ranges, worker.req)
 	}
@@ -793,7 +821,11 @@ func (worker *copIteratorWorker) handleCopResponse(bo *Backoffer, rpcCtx *RPCCon
 				return nil, errors.Trace(err)
 			}
 		}
-		return worker.buildCopTasksFromRemain(bo, lastRange, task)
+		newTasks, err := worker.buildCopTasksFromRemain(bo, lastRange, task)
+		if worker.ctx.Value("index") != nil {
+			log.Println("&&&&&&", "GetLocked", lockErr, lastRange) // hit here
+		}
+		return newTasks, err
 	}
 	if otherErr := resp.pbResp.GetOtherError(); otherErr != "" {
 		err := errors.Errorf("other error: %s", otherErr)
@@ -839,6 +871,7 @@ func (worker *copIteratorWorker) buildCopTasksFromRemain(bo *Backoffer, lastRang
 	if worker.req.Streaming && lastRange != nil {
 		remainedRanges = worker.calculateRemain(task.ranges, lastRange, worker.req.Desc)
 	}
+	// log.Println("buildCopTasksFromRemain", task.ranges, remainedRanges, lastRange)
 	return buildCopTasks(bo, worker.store.regionCache, remainedRanges, worker.req)
 }
 
