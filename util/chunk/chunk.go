@@ -167,6 +167,14 @@ func (c *Chunk) IsFull() bool {
 	return c.NumRows() >= c.requiredRows
 }
 
+// Prune prunes Columns which's index is not in usedColIdxs. usedColIdxs should be ascending.
+func (c *Chunk) Prune(usedColIdxs []int) {
+	for i, idx := range usedColIdxs {
+		c.columns[i] = c.columns[idx]
+	}
+	c.columns = c.columns[:len(usedColIdxs)]
+}
+
 // MakeRef makes Column in "dstColIdx" reference to Column in "srcColIdx".
 func (c *Chunk) MakeRef(srcColIdx, dstColIdx int) {
 	c.columns[dstColIdx] = c.columns[srcColIdx]
@@ -338,10 +346,36 @@ func (c *Chunk) AppendRow(row Row) {
 }
 
 // AppendPartialRow appends a row to the chunk.
-func (c *Chunk) AppendPartialRow(colIdx int, row Row) {
-	c.appendSel(colIdx)
+func (c *Chunk) AppendPartialRow(colOff int, row Row) {
+	c.appendSel(colOff)
 	for i, rowCol := range row.c.columns {
-		chkCol := c.columns[colIdx+i]
+		chkCol := c.columns[colOff+i]
+		chkCol.appendNullBitmap(!rowCol.IsNull(row.idx))
+		if rowCol.isFixed() {
+			elemLen := len(rowCol.elemBuf)
+			offset := row.idx * elemLen
+			chkCol.data = append(chkCol.data, rowCol.data[offset:offset+elemLen]...)
+		} else {
+			start, end := rowCol.offsets[row.idx], rowCol.offsets[row.idx+1]
+			chkCol.data = append(chkCol.data, rowCol.data[start:end]...)
+			chkCol.offsets = append(chkCol.offsets, int64(len(chkCol.data)))
+		}
+		chkCol.length++
+	}
+}
+
+// AppendPartialRowByColIdxs appends a row by its column indices to the chunk.
+func (c *Chunk) AppendRowByColIdxs(row Row, colIdxs []int) {
+	c.AppendPartialRowByColIdxs(0, row, colIdxs)
+	c.numVirtualRows++
+}
+
+// AppendPartialRowByColIdxs appends a row by its column indices to the chunk.
+func (c *Chunk) AppendPartialRowByColIdxs(colOff int, row Row, colIdxs []int) {
+	c.appendSel(colOff)
+	for i, colIdx := range colIdxs {
+		rowCol := row.c.columns[colIdx]
+		chkCol := c.columns[colOff+i]
 		chkCol.appendNullBitmap(!rowCol.IsNull(row.idx))
 		if rowCol.isFixed() {
 			elemLen := len(rowCol.elemBuf)

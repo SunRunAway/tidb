@@ -15,7 +15,9 @@ package core
 
 import (
 	"context"
+	"log"
 	"math"
+	"strings"
 
 	"github.com/pingcap/errors"
 	"github.com/pingcap/parser/ast"
@@ -51,6 +53,7 @@ const (
 	flagPushDownAgg
 	flagPushDownTopN
 	flagJoinReOrder
+	flagPrunColumnsAgain
 )
 
 var optRuleList = []logicalOptRule{
@@ -66,6 +69,7 @@ var optRuleList = []logicalOptRule{
 	&aggregationPushDownSolver{},
 	&pushDownTopNOptimizer{},
 	&joinReOrderSolver{},
+	&columnPruner{}, // column pruning again
 }
 
 // logicalOptRule means a logical optimizing rule, which contains decorrelate, ppd, column pruning, etc.
@@ -160,6 +164,9 @@ func isLogicalRuleDisabled(r logicalOptRule) bool {
 }
 
 func physicalOptimize(logic LogicalPlan) (PhysicalPlan, float64, error) {
+	if strings.HasPrefix(logic.SCtx().GetSessionVars().StmtCtx.OriginalSQL, "select t1.b from t t1, t t2 where t1.a=t2.a") {
+		log.Println("xxxxx")
+	}
 	if _, err := logic.recursiveDeriveStats(); err != nil {
 		return nil, 0, err
 	}

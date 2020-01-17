@@ -368,3 +368,27 @@ func (mr MutRow) ShallowCopyPartialRow(colIdx int, row Row) {
 		}
 	}
 }
+
+// ShallowCopyPartialRow shallow copies the data of `row` to MutRow.
+func (mr MutRow) ShallowCopyPartialRowByColIdxs(colOff int, row Row, colIdxs []int) {
+	for i, colIdx := range colIdxs {
+		srcCol := row.c.columns[colIdx]
+		dstCol := mr.c.columns[colOff+i]
+		if !srcCol.IsNull(row.idx) {
+			// MutRow only contains one row, so we can directly set the whole byte.
+			dstCol.nullBitmap[0] = 1
+		} else {
+			dstCol.nullBitmap[0] = 0
+		}
+
+		if srcCol.isFixed() {
+			elemLen := len(srcCol.elemBuf)
+			offset := row.idx * elemLen
+			dstCol.data = srcCol.data[offset : offset+elemLen]
+		} else {
+			start, end := srcCol.offsets[row.idx], srcCol.offsets[row.idx+1]
+			dstCol.data = srcCol.data[start:end]
+			dstCol.offsets[1] = int64(len(dstCol.data))
+		}
+	}
+}

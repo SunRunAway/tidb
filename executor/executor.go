@@ -16,6 +16,7 @@ package executor
 import (
 	"context"
 	"fmt"
+	"log"
 	"runtime"
 	"strconv"
 	"sync"
@@ -85,12 +86,15 @@ var (
 type baseExecutor struct {
 	ctx           sessionctx.Context
 	id            fmt.Stringer
-	schema        *expression.Schema
+	schema        *expression.Schema // output schema
 	initCap       int
 	maxChunkSize  int
 	children      []Executor
 	retFieldTypes []*types.FieldType
 	runtimeStats  *execdetails.RuntimeStats
+
+	// childrenUsedSchema indicates whether the jth schema of children[i] is used after inline projection.
+	childrenUsedSchema [][]bool
 }
 
 // base returns the baseExecutor of an executor, don't override this method!
@@ -126,6 +130,20 @@ func (e *baseExecutor) Schema() *expression.Schema {
 		return expression.NewSchema()
 	}
 	return e.schema
+}
+
+// inlineProjection supports to prune unneeded columns for outputs of a executor.
+func (e *baseExecutor) inlineProjection() {
+	log.Println("======================================")
+	log.Println(e.schema.Columns)
+
+	for _, child := range e.children {
+		used := plannercore.GetUsedList(e.schema.Columns, child.Schema())
+		log.Println(child.Schema())
+		log.Println(used)
+		e.childrenUsedSchema = append(e.childrenUsedSchema, used)
+	}
+	log.Println("======================================")
 }
 
 // newFirstChunk creates a new chunk to buffer current executor's result.

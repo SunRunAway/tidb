@@ -16,6 +16,7 @@ package core
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 
@@ -289,6 +290,7 @@ func (p *LogicalJoin) getHashJoin(prop *property.PhysicalProperty, innerIdx int,
 		chReqProps[1-innerIdx].ExpectedCnt = p.children[1-innerIdx].statsInfo().RowCount * expCntScale
 	}
 	hashJoin := NewPhysicalHashJoin(p, innerIdx, useOuterToBuild, p.stats.ScaleByExpectCnt(prop.ExpectedCnt), chReqProps...)
+	log.Println("LogicalJoin.getHashJoin", p.schema)
 	hashJoin.SetSchema(p.schema)
 	return hashJoin
 }

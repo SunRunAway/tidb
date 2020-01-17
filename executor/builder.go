@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"log"
 	"math"
 	"sort"
 	"strings"
@@ -1025,6 +1026,7 @@ func (b *executorBuilder) buildHashJoin(v *plannercore.PhysicalHashJoin) Executo
 		return nil
 	}
 
+	log.Println("######### buildHashJoin", v.Schema())
 	e := &HashJoinExec{
 		baseExecutor:      newBaseExecutor(b.ctx, v.Schema(), v.ExplainID(), leftExec, rightExec),
 		concurrency:       v.Concurrency,
@@ -1075,10 +1077,13 @@ func (b *executorBuilder) buildHashJoin(v *plannercore.PhysicalHashJoin) Executo
 			defaultValues = make([]types.Datum, e.buildSideExec.Schema().Len())
 		}
 	}
+	e.baseExecutor.inlineProjection()
 	e.joiners = make([]joiner, e.concurrency)
 	for i := uint(0); i < e.concurrency; i++ {
 		e.joiners[i] = newJoiner(b.ctx, v.JoinType, v.InnerChildIdx == 0, defaultValues,
 			v.OtherConditions, lhsTypes, rhsTypes)
+		// enable inline projection
+		e.joiners[i].SetChildrenUsedSchema(e.baseExecutor.childrenUsedSchema)
 	}
 	executorCountHashJoinExec.Inc()
 	return e

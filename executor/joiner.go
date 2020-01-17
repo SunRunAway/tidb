@@ -95,6 +95,9 @@ type joiner interface {
 
 	// Clone deep copies a joiner.
 	Clone() joiner
+
+	// TODO
+	SetChildrenUsedSchema(used [][]bool)
 }
 
 func newJoiner(ctx sessionctx.Context, joinType plannercore.JoinType,
@@ -162,6 +165,8 @@ type baseJoiner struct {
 	selected     []bool
 	isNull       []bool
 	maxChunkSize int
+
+	lUsed, rUsed []int
 }
 
 func (j *baseJoiner) initDefaultInner(innerTypes []*types.FieldType, defaultInner []types.Datum) {
@@ -171,6 +176,10 @@ func (j *baseJoiner) initDefaultInner(innerTypes []*types.FieldType, defaultInne
 }
 
 func (j *baseJoiner) makeJoinRowToChunk(chk *chunk.Chunk, lhs, rhs chunk.Row) {
+	if j.lUsed != nil || j.rUsed != nil {
+		chk.AppendRowByColIdxs(lhs, j.lUsed)
+		chk.AppendPartialRowByColIdxs(lhs.Len(), rhs, j.rUsed)
+	}
 	// Call AppendRow() first to increment the virtual rows.
 	// Fix: https://github.com/pingcap/tidb/issues/5771
 	chk.AppendRow(lhs)
@@ -181,6 +190,10 @@ func (j *baseJoiner) makeJoinRowToChunk(chk *chunk.Chunk, lhs, rhs chunk.Row) {
 func (j *baseJoiner) makeShallowJoinRow(isRightJoin bool, inner, outer chunk.Row) {
 	if !isRightJoin {
 		inner, outer = outer, inner
+	}
+	if j.lUsed != nil || j.rUsed != nil {
+		j.shallowRow.ShallowCopyPartialRowByColIdxs(0, inner, j.lUsed)
+		j.shallowRow.ShallowCopyPartialRowByColIdxs(inner.Len(), outer, j.rUsed)
 	}
 	j.shallowRow.ShallowCopyPartialRow(0, inner)
 	j.shallowRow.ShallowCopyPartialRow(inner.Len(), outer)
@@ -224,6 +237,22 @@ func (j *baseJoiner) filterAndCheckOuterRowStatus(input, output *chunk.Chunk, in
 	// Batch copies selected rows to output chunk.
 	_, err = chunk.CopySelectedJoinRowsDirect(input, j.selected, output)
 	return outerRowStatus, err
+}
+
+func (j *baseJoiner) SetChildrenUsedSchema(used [][]bool) {
+	if used == nil {
+		return
+	}
+	for i, u := range used[0] {
+		if u {
+			j.lUsed = append(j.lUsed, i)
+		}
+	}
+	for i, u := range used[1] {
+		if u {
+			j.rUsed = append(j.rUsed, i)
+		}
+	}
 }
 
 func (j *baseJoiner) Clone() baseJoiner {
