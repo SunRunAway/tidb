@@ -178,7 +178,8 @@ func (j *baseJoiner) initDefaultInner(innerTypes []*types.FieldType, defaultInne
 func (j *baseJoiner) makeJoinRowToChunk(chk *chunk.Chunk, lhs, rhs chunk.Row) {
 	if j.lUsed != nil || j.rUsed != nil {
 		chk.AppendRowByColIdxs(lhs, j.lUsed)
-		chk.AppendPartialRowByColIdxs(lhs.Len(), rhs, j.rUsed)
+		chk.AppendPartialRowByColIdxs(len(j.lUsed), rhs, j.rUsed)
+		return
 	}
 	// Call AppendRow() first to increment the virtual rows.
 	// Fix: https://github.com/pingcap/tidb/issues/5771
@@ -193,7 +194,7 @@ func (j *baseJoiner) makeShallowJoinRow(isRightJoin bool, inner, outer chunk.Row
 	}
 	if j.lUsed != nil || j.rUsed != nil {
 		j.shallowRow.ShallowCopyPartialRowByColIdxs(0, inner, j.lUsed)
-		j.shallowRow.ShallowCopyPartialRowByColIdxs(inner.Len(), outer, j.rUsed)
+		j.shallowRow.ShallowCopyPartialRowByColIdxs(len(j.lUsed), outer, j.rUsed)
 	}
 	j.shallowRow.ShallowCopyPartialRow(0, inner)
 	j.shallowRow.ShallowCopyPartialRow(inner.Len(), outer)
@@ -627,6 +628,11 @@ func (j *leftOuterJoiner) tryToMatchOuters(outers chunk.Iterator, inner chunk.Ro
 }
 
 func (j *leftOuterJoiner) onMissMatch(_ bool, outer chunk.Row, chk *chunk.Chunk) {
+	if j.lUsed != nil || j.rUsed != nil {
+		chk.AppendPartialRowByColIdxs(0, outer, j.lUsed)
+		chk.AppendPartialRowByColIdxs(len(j.lUsed), j.defaultInner, j.rUsed)
+		return
+	}
 	chk.AppendPartialRow(0, outer)
 	chk.AppendPartialRow(outer.Len(), j.defaultInner)
 }
