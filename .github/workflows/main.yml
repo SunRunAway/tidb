@@ -1,0 +1,2 @@
+- name: Licensed CI
+  uses: jonabc/licensed-ci@v1.4.0
