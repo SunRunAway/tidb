@@ -1,2 +1,7 @@
-- name: Licensed CI
-  uses: jonabc/licensed-ci@v1.4.0
+- name: Setup github/licensed
+  uses: jonabc/setup-licensed@v1.0.0
+  with:
+    # The github/licensed version to install
+    version: 
+    # The target install directory for the github/licensed executable
+    install-dir: # optional, default is /usr/local/bin
