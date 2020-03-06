@@ -66,7 +66,7 @@ Read the [Quick Start Guide](https://pingcap.com/docs/QUICKSTART), which include
 - [**Stack Overflow**](https://stackoverflow.com/questions/tagged/tidb)
 - [**User Group (Chinese)**](https://asktug.com)
 
-## Documentation
+## Documentationx
 
 + [English](https://pingcap.com/docs)
 + [简体中文](https://pingcap.com/docs-cn)
