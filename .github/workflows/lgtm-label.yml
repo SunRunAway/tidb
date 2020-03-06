@@ -8,16 +8,16 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: awact/label-action@0.1.0
+      - uses: andymckay/labeler@1.0.2
         if: >
          !contains(github.event.issue.labels.*.name, 'status/LGT1') && 
          !contains(github.event.issue.labels.*.name, 'status/LGT2') && 
          (contains(github.event.review.body, 'LGTM') || 
          contains(github.event.review.body, 'lgtm') || 
          contains(github.event.review.body, 'Lgtm'))
-        env:
-          ADD_LABEL: 'status/LGT1'
-      - uses: awact/label-action@0.1.0
+        with:
+          add-labels: 'status/LGT1'
+      - uses: andymckay/labeler@1.0.2
         if: >
          contains(github.event.issue.labels.*.name, 'status/LGT1') && 
          !contains(github.event.issue.labels.*.name, 'status/LGT2') && 
@@ -25,4 +25,5 @@ jobs:
          contains(github.event.review.body, 'lgtm') || 
          contains(github.event.review.body, 'Lgtm'))
         env:
-          ADD_LABEL: 'status/LGT2'
+          add-labels: 'status/LGT2'
+          remove-labels: 'status/LGT1'
