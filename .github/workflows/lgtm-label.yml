@@ -18,7 +18,7 @@ jobs:
         with:
           label: 'status/LGT1'
           type: add
-      - uses: andymckay/labeler@1.0.2
+      - uses: buildsville/add-remove-label@v1
         if: >
          contains(github.event.issue.labels.*.name, 'status/LGT1') && 
          !contains(github.event.issue.labels.*.name, 'status/LGT2') && 
