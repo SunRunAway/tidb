@@ -1,16 +1,13 @@
-name: Auto Assign Project
-
+name: Add a new GitHub Project card linked to a GitHub issue to the specified project column
 on: [issues]
-env:
-  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
 jobs:
-  assign_one_project:
+  github-actions-automate-projects:
     runs-on: ubuntu-latest
-    name: Assign to One Project
     steps:
-    - name: Run assignment to one project
-      uses: srggrs/assign-one-project-github-action@1.1.0
-      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'component/expression')
-      with:
-        project: 'https://github.com/SunRunAway/tidb/projects/1'
+    - name: add-new-issues-to-repository-based-project-column
+      uses: docker://takanabe/github-actions-automate-projects:v0.0.1
+      if: github.event_name == 'issues' && github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'component/expression')
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_PROJECT_URL: https://github.com/SunRunAway/tidb/projects/1
+        GITHUB_PROJECT_COLUMN_NAME: To do
