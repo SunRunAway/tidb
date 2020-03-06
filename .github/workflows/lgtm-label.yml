@@ -1,0 +1,28 @@
+name: LGTM label
+on:
+  pull_request_review:
+    types: [submitted]
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: awact/label-action@0.1.0
+        if: >
+         !contains(github.event.issue.labels.*.name, 'status/LGT1') && 
+         !contains(github.event.issue.labels.*.name, 'status/LGT2') && 
+         (contains(github.event.review.body, 'LGTM') || 
+         contains(github.event.review.body, 'lgtm') || 
+         contains(github.event.review.body, 'Lgtm'))
+        with:
+          ADD_LABEL: 'status/LGT1'
+      - uses: awact/label-action@0.1.0
+        if: >
+         contains(github.event.issue.labels.*.name, 'status/LGT1') && 
+         !contains(github.event.issue.labels.*.name, 'status/LGT2') && 
+         (contains(github.event.review.body, 'LGTM') || 
+         contains(github.event.review.body, 'lgtm') || 
+         contains(github.event.review.body, 'Lgtm'))
+        with:
+          ADD_LABEL: 'status/LGT2'
