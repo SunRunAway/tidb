@@ -11,6 +11,6 @@ jobs:
     steps:
     - name: Run assignment to one project
       uses: srggrs/assign-one-project-github-action@1.1.0
-      if: github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'component/expression')
+      if: github.event.action == 'labeled' && contains(github.event.issue.labels.*.name, 'component/expression')
       with:
         project: 'https://github.com/SunRunAway/tidb/projects/1'
