@@ -15,7 +15,7 @@ jobs:
          (contains(github.event.review.body, 'LGTM') || 
          contains(github.event.review.body, 'lgtm') || 
          contains(github.event.review.body, 'Lgtm'))
-        with:
+        env:
           ADD_LABEL: 'status/LGT1'
       - uses: awact/label-action@0.1.0
         if: >
@@ -24,5 +24,5 @@ jobs:
          (contains(github.event.review.body, 'LGTM') || 
          contains(github.event.review.body, 'lgtm') || 
          contains(github.event.review.body, 'Lgtm'))
-        with:
+        env:
           ADD_LABEL: 'status/LGT2'
