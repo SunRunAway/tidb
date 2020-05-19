@@ -705,17 +705,31 @@ func (worker *copIteratorWorker) handleTaskOnce(bo *Backoffer, task *copTask, ch
 
 	// If there are many ranges, it is very likely to be a TableLookupRequest. They are not worth to cache since
 	// computing is not the main cost. Ignore such requests directly to avoid slowly building the cache key.
-	if task.cmdType == tikvrpc.CmdCop && worker.store.coprCache != nil && worker.req.Cacheable && len(copReq.Ranges) < 10 {
+	if task.cmdType == tikvrpc.CmdCop && worker.store.coprCache != nil && worker.req.Cacheable {
 		cKey, err := coprCacheBuildKey(&copReq)
 		if err == nil {
 			cacheKey = cKey
 			cValue := worker.store.coprCache.Get(cKey)
 			copReq.IsCacheEnabled = true
-			if cValue != nil && cValue.RegionID == task.region.id && cValue.TimeStamp <= worker.req.StartTs {
-				// Append cache version to the request to skip Coprocessor computation if possible
-				// when request result is cached
-				copReq.CacheIfMatchVersion = cValue.RegionDataVersion
-				cacheValue = cValue
+
+			if cValue != nil && cValue.RegionID == task.region.id {
+				if worker.req.SnapshotRead {
+					if cValue.TimeStamp == worker.req.StartTs {
+						resp := &copResponse{
+							pbResp: &coprocessor.Response{IsCacheHit: true},
+							detail: &execdetails.ExecDetails{},
+						}
+						cacheValue = cValue
+						return worker.handleCopResponse(bo, nil, resp, cacheKey, cacheValue, task, ch, nil, 0)
+					}
+				} else {
+					if cValue.TimeStamp <= worker.req.StartTs {
+						// Append cache version to the request to skip Coprocessor computation if possible
+						// when request result is cached
+						copReq.CacheIfMatchVersion = cValue.RegionDataVersion
+						cacheValue = cValue
+					}
+				}
 			} else {
 				copReq.CacheIfMatchVersion = 0
 			}

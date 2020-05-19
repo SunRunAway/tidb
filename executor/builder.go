@@ -528,7 +528,7 @@ func (b *executorBuilder) buildChecksumTable(v *plannercore.ChecksumTable) Execu
 		tables:       make(map[int64]*checksumContext),
 		done:         false,
 	}
-	startTs, err := b.getSnapshotTS()
+	startTs, _, err := b.getSnapshotTS("", "")
 	if err != nil {
 		b.err = err
 		return nil
@@ -1317,25 +1317,35 @@ func (b *executorBuilder) buildTableDual(v *plannercore.PhysicalTableDual) Execu
 	return e
 }
 
-func (b *executorBuilder) getSnapshotTS() (uint64, error) {
+func (b *executorBuilder) getSnapshotTS(dbName, tblName string) (snapShotTs uint64, snapShotRead bool, err error) {
+	if roTbl := b.ctx.GetSessionVars().ReadonlyTable; roTbl != nil {
+		if dbName == "" {
+			dbName = b.ctx.GetSessionVars().CurrentDB
+		}
+		if snapShotTS, ok := roTbl[dbName+"."+tblName]; ok {
+			return snapShotTS, true, nil
+		}
+	}
 	if b.snapshotTS != 0 {
 		// Return the cached value.
-		return b.snapshotTS, nil
+		return b.snapshotTS, false, nil
 	}
 
 	snapshotTS := b.ctx.GetSessionVars().SnapshotTS
+	snapShotRead = true
 	txn, err := b.ctx.Txn(true)
 	if err != nil {
-		return 0, err
+		return 0, false, err
 	}
 	if snapshotTS == 0 {
+		snapShotRead = false
 		snapshotTS = txn.StartTS()
 	}
 	b.snapshotTS = snapshotTS
 	if b.snapshotTS == 0 {
-		return 0, errors.Trace(ErrGetStartTS)
+		return 0, false, errors.Trace(ErrGetStartTS)
 	}
-	return snapshotTS, nil
+	return snapshotTS, snapShotRead, nil
 }
 
 func (b *executorBuilder) buildMemTable(v *plannercore.PhysicalMemTable) Executor {
@@ -2253,7 +2263,7 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 		pt := tbl.(table.PartitionedTable)
 		tbl = pt.GetPartition(physicalTableID)
 	}
-	startTS, err := b.getSnapshotTS()
+	startTS, snapshotRead, err := b.getSnapshotTS(ts.DBName.L, ts.Table.Name.L)
 	if err != nil {
 		return nil, err
 	}
@@ -2261,6 +2271,7 @@ func buildNoRangeTableReader(b *executorBuilder, v *plannercore.PhysicalTableRea
 		baseExecutor:   newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		dagPB:          dagReq,
 		startTS:        startTS,
+		snapshotRead:   snapshotRead,
 		table:          tbl,
 		keepOrder:      ts.KeepOrder,
 		desc:           ts.Desc,
@@ -2334,7 +2345,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 	} else {
 		physicalTableID = is.Table.ID
 	}
-	startTS, err := b.getSnapshotTS()
+	startTS, snapshotRead, err := b.getSnapshotTS(is.DBName.L, is.Table.Name.L)
 	if err != nil {
 		return nil, err
 	}
@@ -2342,6 +2353,7 @@ func buildNoRangeIndexReader(b *executorBuilder, v *plannercore.PhysicalIndexRea
 		baseExecutor:    newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		dagPB:           dagReq,
 		startTS:         startTS,
+		snapshotRead:    snapshotRead,
 		physicalTableID: physicalTableID,
 		table:           tbl,
 		index:           is.Index,
@@ -2432,7 +2444,7 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 		return nil, err
 	}
 	ts := v.TablePlans[0].(*plannercore.PhysicalTableScan)
-	startTS, err := b.getSnapshotTS()
+	startTS, snapshotRead, err := b.getSnapshotTS(is.DBName.L, is.Table.Name.L)
 	if err != nil {
 		return nil, err
 	}
@@ -2440,6 +2452,7 @@ func buildNoRangeIndexLookUpReader(b *executorBuilder, v *plannercore.PhysicalIn
 		baseExecutor:      newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		dagPB:             indexReq,
 		startTS:           startTS,
+		snapshotRead:      snapshotRead,
 		table:             tbl,
 		index:             is.Index,
 		keepOrder:         is.KeepOrder,
@@ -2545,7 +2558,7 @@ func buildNoRangeIndexMergeReader(b *executorBuilder, v *plannercore.PhysicalInd
 	if err != nil {
 		return nil, err
 	}
-	startTS, err := b.getSnapshotTS()
+	startTS, snapshotRead, err := b.getSnapshotTS(ts.DBName.L, ts.Table.Name.L)
 	if err != nil {
 		return nil, err
 	}
@@ -2553,6 +2566,7 @@ func buildNoRangeIndexMergeReader(b *executorBuilder, v *plannercore.PhysicalInd
 		baseExecutor:      newBaseExecutor(b.ctx, v.Schema(), v.ExplainID()),
 		dagPBs:            partialReqs,
 		startTS:           startTS,
+		snapshotRead:      snapshotRead,
 		table:             table,
 		indexes:           indexes,
 		descs:             descs,
@@ -2693,7 +2707,8 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 		colExec := true
 		e.dagPB.CollectExecutionSummaries = &colExec
 	}
-	startTS, err := builder.getSnapshotTS()
+	db, _ := builder.is.SchemaByTable(e.table.Meta())
+	startTS, snapShotRead, err := builder.getSnapshotTS(db.Name.L, e.table.Meta().Name.L)
 	if err != nil {
 		return nil, err
 	}
@@ -2703,6 +2718,7 @@ func (builder *dataReaderBuilder) buildTableReaderFromHandles(ctx context.Contex
 	kvReq, err := b.SetTableHandles(getPhysicalTableID(e.table), handles).
 		SetDAGRequest(e.dagPB).
 		SetStartTS(startTS).
+		SetSnapshotRead(snapShotRead).
 		SetDesc(e.desc).
 		SetKeepOrder(e.keepOrder).
 		SetStreaming(e.streaming).
@@ -3012,7 +3028,7 @@ func (b *executorBuilder) buildBatchPointGet(plan *plannercore.BatchPointGetPlan
 			return nil
 		}
 	}
-	startTS, err := b.getSnapshotTS()
+	startTS, _, err := b.getSnapshotTS("", "")
 	if err != nil {
 		b.err = err
 		return nil
