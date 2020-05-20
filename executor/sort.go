@@ -26,6 +26,7 @@ import (
 	"github.com/pingcap/tidb/types"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/disk"
+	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tidb/util/memory"
 	"github.com/pingcap/tidb/util/stringutil"
 )
@@ -165,9 +166,11 @@ func (e *SortExec) Next(ctx context.Context, req *chunk.Chunk) error {
 	return nil
 }
 
-func (e *SortExec) generatePartition() {
+func (e *SortExec) generatePartition(spill bool) {
+	logutil.BgLogger().Info(fmt.Sprintf("start %v count:%v, spill: %v", e.partNum, e.rowChunks.NumRow(), spill))
 	e.initPointers()
 	sort.Slice(e.rowPtrs, e.keyColumnsLess)
+	logutil.BgLogger().Info(fmt.Sprintf("end   %v count:%v, spill: %v", e.partNum, e.rowChunks.NumRow(), spill))
 	e.partitionList = append(e.partitionList, e.rowChunks)
 	e.partitionRowPtrs = append(e.partitionRowPtrs, e.rowPtrs)
 }
@@ -247,7 +250,7 @@ func (e *SortExec) fetchRowChunks(ctx context.Context) error {
 		e.spillAction = e.rowChunks.ActionSpill()
 		e.ctx.GetSessionVars().StmtCtx.MemTracker.FallbackOldAndSetNewAction(e.spillAction)
 		onExceededCallback = func(rowContainer *chunk.RowContainer) {
-			e.generatePartition()
+			e.generatePartition(true)
 		}
 		e.rowChunks.SetOnExceededCallback(onExceededCallback)
 		e.rowChunks.GetDiskTracker().AttachTo(e.diskTracker)
@@ -277,7 +280,7 @@ func (e *SortExec) fetchRowChunks(ctx context.Context) error {
 		}
 	}
 	if e.rowChunks.NumRow() > 0 {
-		e.generatePartition()
+		e.generatePartition(false)
 	}
 	return nil
 }

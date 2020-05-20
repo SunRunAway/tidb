@@ -2946,6 +2946,8 @@ func (b *executorBuilder) buildShuffle(v *plannercore.PhysicalShuffle) *ShuffleE
 		if b.err != nil {
 			return nil
 		}
+		w.childExec.base().partNum = i
+		w.childExec.base().children[0].base().partNum = i
 
 		shuffle.workers[i] = w
 	}
