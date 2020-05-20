@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/dgryski/go-farm"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
+	"github.com/spaolacci/murmur3"
 	"go.uber.org/zap"
 )
 
@@ -80,7 +80,7 @@ type ShuffleExec struct {
 	prepared bool
 	executed bool
 
-	splitter   partitionSplitter
+	splitter   []partitionSplitter
 	dataSource Executor
 
 	finishCh chan struct{}
@@ -218,13 +218,13 @@ func recoveryShuffleExec(output chan *shuffleOutput, r interface{}) {
 	logutil.BgLogger().Error("shuffle panicked", zap.Error(err), zap.Stack("stack"))
 }
 
-func (e *ShuffleExec) split(input <-chan *chunk.Chunk, giveBack chan<- *chunk.Chunk, wg *sync.WaitGroup) {
+func (e *ShuffleExec) split(splitter partitionSplitter, input <-chan *chunk.Chunk, giveBack chan<- *chunk.Chunk, wg *sync.WaitGroup) {
 	defer wg.Done()
 	var err error
 	var workerIndices []int
 	results := make([]*chunk.Chunk, len(e.workers))
 	for chk := range input {
-		workerIndices, err = e.splitter.split(e.ctx, chk, workerIndices)
+		workerIndices, err = splitter.split(e.ctx, chk, workerIndices)
 		if err != nil {
 			e.outputCh <- &shuffleOutput{err: err}
 			return
@@ -282,11 +282,12 @@ func (e *ShuffleExec) fetchDataAndSplit(ctx context.Context) {
 	}()
 
 	for i := 0; i < e.concurrency; i++ {
+		splitter := e.splitter[i]
 		chk := newFirstChunk(e.dataSource)
 		chkCh <- chk
 
 		splitWg.Add(1)
-		go e.split(splitInput, chkCh, splitWg)
+		go e.split(splitter, splitInput, chkCh, splitWg)
 	}
 
 	for {
@@ -418,10 +419,7 @@ func (s *partitionHashSplitter) split(ctx sessionctx.Context, input *chunk.Chunk
 	workerIndices = workerIndices[:0]
 	numRows := input.NumRows()
 	for i := 0; i < numRows; i++ {
-		workerIndices = append(workerIndices, 39-int(farm.Hash64(s.hashKeys[i])%uint64(s.numWorkers)))
-		// if workerIndices[len(workerIndices)-1] == 37 {
-		// 	logutil.BgLogger().Info(fmt.Sprintf("%v %v", s.hashKeys))
-		// }
+		workerIndices = append(workerIndices, int(murmur3.Sum32(s.hashKeys[i]))%s.numWorkers)
 	}
 	return workerIndices, nil
 }

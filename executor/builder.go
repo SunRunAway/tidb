@@ -2912,11 +2912,14 @@ func (b *executorBuilder) buildShuffle(v *plannercore.PhysicalShuffle) *ShuffleE
 		concurrency: v.Concurrency,
 	}
 
+	shuffle.splitter = make([]partitionSplitter, shuffle.concurrency)
 	switch v.SplitterType {
 	case plannercore.PartitionHashSplitterType:
-		shuffle.splitter = &partitionHashSplitter{
-			byItems:    v.HashByItems,
-			numWorkers: shuffle.concurrency,
+		for i := 0; i < shuffle.concurrency; i++ {
+			shuffle.splitter[i] = &partitionHashSplitter{
+				byItems:    v.HashByItems,
+				numWorkers: shuffle.concurrency,
+			}
 		}
 	default:
 		panic("Not implemented. Should not reach here.")
