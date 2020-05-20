@@ -15,6 +15,7 @@ package executor
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/pingcap/errors"
@@ -99,6 +100,9 @@ func (e *ShuffleExec) Open(ctx context.Context) error {
 	}
 	if err := e.baseExecutor.Open(ctx); err != nil {
 		return err
+	}
+	for _, w := range e.workers {
+		logutil.BgLogger().Info(fmt.Sprintf("ShuffleExec: %v, %v", w.base().partNum, w.base().children[0].base().partNum))
 	}
 
 	e.prepared = false
