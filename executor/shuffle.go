@@ -252,8 +252,12 @@ func (e *ShuffleExec) split(input <-chan *chunk.Chunk, giveBack chan<- *chunk.Ch
 	}
 	for i, w := range e.workers {
 		if results[i] != nil {
-			w.inputCh <- results[i]
-			results[i] = nil
+			if results[i].NumRows() > 0 {
+				w.inputCh <- results[i]
+				results[i] = nil
+			} else {
+				w.inputHolderCh <- results[i]
+			}
 		}
 	}
 }
