@@ -102,7 +102,9 @@ func (e *ShuffleExec) Open(ctx context.Context) error {
 		return err
 	}
 	for _, w := range e.workers {
-		logutil.BgLogger().Info(fmt.Sprintf("ShuffleExec: %v, %v", w.base().partNum, w.base().children[0].base().partNum))
+		_, ok1 := w.childExec.(*StreamAggExec)
+		_, ok2 := w.childExec.base().children[0].(*SortExec)
+		logutil.BgLogger().Info(fmt.Sprintf("ShuffleExec: %v, %v, %v, %v", ok1, ok2, w.childExec.base().partNum, w.childExec.base().children[0].base().partNum))
 	}
 
 	e.prepared = false
