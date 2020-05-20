@@ -418,7 +418,10 @@ func (s *partitionHashSplitter) split(ctx sessionctx.Context, input *chunk.Chunk
 	workerIndices = workerIndices[:0]
 	numRows := input.NumRows()
 	for i := 0; i < numRows; i++ {
-		workerIndices = append(workerIndices, 39-int(farm.Hash32(s.hashKeys[i]))%s.numWorkers)
+		workerIndices = append(workerIndices, 39-int(farm.Hash64(s.hashKeys[i])%uint64(s.numWorkers)))
+		// if workerIndices[len(workerIndices)-1] == 37 {
+		// 	logutil.BgLogger().Info(fmt.Sprintf("%v %v", s.hashKeys))
+		// }
 	}
 	return workerIndices, nil
 }
