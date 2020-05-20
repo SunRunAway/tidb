@@ -18,13 +18,13 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/OneOfOne/xxhash"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/expression"
 	"github.com/pingcap/tidb/sessionctx"
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/logutil"
-	"github.com/spaolacci/murmur3"
 	"go.uber.org/zap"
 )
 
@@ -418,7 +418,8 @@ func (s *partitionHashSplitter) split(ctx sessionctx.Context, input *chunk.Chunk
 	workerIndices = workerIndices[:0]
 	numRows := input.NumRows()
 	for i := 0; i < numRows; i++ {
-		workerIndices = append(workerIndices, int(murmur3.Sum32(s.hashKeys[i]))%s.numWorkers)
+		// workerIndices = append(workerIndices, int(murmur3.Sum32(s.hashKeys[i]))%s.numWorkers)
+		workerIndices = append(workerIndices, int(xxhash.Checksum32(s.hashKeys[i]))%s.numWorkers)
 	}
 	return workerIndices, nil
 }
