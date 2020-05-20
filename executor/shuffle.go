@@ -16,9 +16,9 @@ package executor
 import (
 	"context"
 	"fmt"
+	"hash/crc32"
 	"sync"
 
-	"github.com/OneOfOne/xxhash"
 	"github.com/pingcap/errors"
 	"github.com/pingcap/failpoint"
 	"github.com/pingcap/tidb/expression"
@@ -418,8 +418,8 @@ func (s *partitionHashSplitter) split(ctx sessionctx.Context, input *chunk.Chunk
 	workerIndices = workerIndices[:0]
 	numRows := input.NumRows()
 	for i := 0; i < numRows; i++ {
-		// workerIndices = append(workerIndices, int(murmur3.Sum32(s.hashKeys[i]))%s.numWorkers)
-		workerIndices = append(workerIndices, int(xxhash.Checksum32(s.hashKeys[i]))%s.numWorkers)
+		workerIndices = append(workerIndices, int(crc32.ChecksumIEEE(s.hashKeys[i]))%s.numWorkers)
+		// workerIndices = append(workerIndices, int(xxhash.Checksum32(s.hashKeys[i]))%s.numWorkers)
 	}
 	return workerIndices, nil
 }
