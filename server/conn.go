@@ -41,6 +41,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"runtime"
 	"runtime/pprof"
@@ -1629,6 +1630,9 @@ func (cc *clientConn) writeChunks(ctx context.Context, rs ResultSet, binary bool
 			gotColumnInfo = true
 		}
 		rowCount := req.NumRows()
+		log.Println("haha", rowCount)
+		time.Sleep(1e9)
+		log.Println("hoho", rowCount)
 		if rowCount == 0 {
 			break
 		}
