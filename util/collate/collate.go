@@ -21,6 +21,7 @@ import (
 	"github.com/pingcap/parser/charset"
 	"github.com/pingcap/parser/mysql"
 	"github.com/pingcap/parser/terror"
+	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/logutil"
 	"go.uber.org/zap"
 )
@@ -34,13 +35,13 @@ var (
 	binCollatorInstance = &binCollator{}
 
 	// ErrUnsupportedCollation is returned when an unsupported collation is specified.
-	ErrUnsupportedCollation = terror.ClassDDL.New(mysql.ErrUnknownCollation, "Unsupported collation when new collation is enabled: '%-.64s'")
+	ErrUnsupportedCollation = dbterror.New(terror.ClassDDL, mysql.ErrUnknownCollation, "Unsupported collation when new collation is enabled: '%-.64s'")
 	// ErrIllegalMixCollation is returned when illegal mix of collations.
-	ErrIllegalMixCollation = terror.ClassExpression.New(mysql.ErrCantAggregateNcollations, mysql.MySQLErrName[mysql.ErrCantAggregateNcollations])
+	ErrIllegalMixCollation = dbterror.NewStd(terror.ClassExpression, mysql.ErrCantAggregateNcollations)
 	// ErrIllegalMix2Collation is returned when illegal mix of 2 collations.
-	ErrIllegalMix2Collation = terror.ClassExpression.New(mysql.ErrCantAggregate2collations, mysql.MySQLErrName[mysql.ErrCantAggregate2collations])
+	ErrIllegalMix2Collation = dbterror.NewStd(terror.ClassExpression, mysql.ErrCantAggregate2collations)
 	// ErrIllegalMix3Collation is returned when illegal mix of 3 collations.
-	ErrIllegalMix3Collation = terror.ClassExpression.New(mysql.ErrCantAggregate3collations, mysql.MySQLErrName[mysql.ErrCantAggregate3collations])
+	ErrIllegalMix3Collation = dbterror.NewStd(terror.ClassExpression, mysql.ErrCantAggregate3collations)
 )
 
 // DefaultLen is set for datum if the string datum don't know its length.

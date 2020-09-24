@@ -13,9 +13,27 @@
 
 package errno
 
+var NeedRedact = map[uint16][]int{
+	ErrDupEntry: {0, 1},
+}
+
+type errMessage struct {
+	Message      string
+	RedactArgPos []int
+}
+
+func msg(message string) *errMessage {
+	return &errMessage{Message: message, RedactArgPos: nil}
+}
+
+func (e *errMessage) RedactArguments(pos ...int) *errMessage {
+	e.RedactArgPos = pos
+	return e
+}
+
 // MySQLErrName maps error code to MySQL error messages.
-var MySQLErrName = map[uint16]string{
-	ErrHashchk:                                  "hashchk",
+var MySQLErrName = map[uint16]*errMessage{
+	ErrHashchk:                                  msg("hashchk").RedactArguments(),
 	ErrNisamchk:                                 "isamchk",
 	ErrNo:                                       "NO",
 	ErrYes:                                      "YES",

@@ -24,7 +24,7 @@ type testErrorSuite struct{}
 var _ = Suite(testErrorSuite{})
 
 func (s testErrorSuite) TestError(c *C) {
-	kvErrs := []*terror.Error{
+	kvErrs := []*dberror.Error{
 		ErrNotExist,
 		ErrTxnRetryable,
 		ErrCannotSetNilValue,

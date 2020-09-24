@@ -25,6 +25,7 @@ import (
 	"github.com/pingcap/tidb/util/chunk"
 	"github.com/pingcap/tidb/util/codec"
 	"github.com/pingcap/tidb/util/collate"
+	"github.com/pingcap/tidb/util/dbterror"
 	"github.com/pingcap/tidb/util/logutil"
 	"github.com/pingcap/tipb/go-tipb"
 	"go.uber.org/zap"
@@ -36,7 +37,7 @@ func ExpressionsToPBList(sc *stmtctx.StatementContext, exprs []Expression, clien
 	for _, expr := range exprs {
 		v := pc.ExprToPB(expr)
 		if v == nil {
-			return nil, terror.ClassOptimizer.New(mysql.ErrInternal, mysql.MySQLErrName[mysql.ErrInternal]).
+			return nil, dbterror.NewStd(terror.ClassOptimizer, mysql.ErrInternal).
 				GenWithStack("expression %v cannot be pushed down", expr)
 		}
 		pbExpr = append(pbExpr, v)

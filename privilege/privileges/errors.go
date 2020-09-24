@@ -16,11 +16,12 @@ package privileges
 import (
 	"github.com/pingcap/parser/terror"
 	mysql "github.com/pingcap/tidb/errno"
+	"github.com/pingcap/tidb/util/dbterror"
 )
 
 // error definitions.
 var (
-	errInvalidPrivilegeType = terror.ClassPrivilege.New(mysql.ErrInvalidPrivilegeType, mysql.MySQLErrName[mysql.ErrInvalidPrivilegeType])
-	ErrNonexistingGrant     = terror.ClassPrivilege.New(mysql.ErrNonexistingGrant, mysql.MySQLErrName[mysql.ErrNonexistingGrant])
-	errLoadPrivilege        = terror.ClassPrivilege.New(mysql.ErrLoadPrivilege, mysql.MySQLErrName[mysql.ErrLoadPrivilege])
+	errInvalidPrivilegeType = dbterror.NewStd(terror.ClassPrivilege, mysql.ErrInvalidPrivilegeType)
+	ErrNonexistingGrant     = dbterror.NewStd(terror.ClassPrivilege, mysql.ErrNonexistingGrant)
+	errLoadPrivilege        = dbterror.NewStd(terror.ClassPrivilege, mysql.ErrLoadPrivilege)
 )
