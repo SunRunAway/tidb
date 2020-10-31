@@ -670,6 +670,9 @@ func (p *LogicalJoin) buildIndexJoinInner2IndexScan(
 			coverAllJoinKeys = false
 		}
 	}
+	if len(helper.idxOff2KeyOff) < len(keyOff2IdxOff) {
+		coverAllJoinKeys = false
+	}
 	joins = make([]PhysicalPlan, 0, 3)
 	rangeInfo := helper.buildRangeDecidedByInformation(helper.chosenPath.IdxCols, outerJoinKeys)
 	maxOneRow := false
